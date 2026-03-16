@@ -52,6 +52,8 @@ COLUMNS: list[tuple[str, str]] = [
     ("is_urgent",             "Срочная"),
     ("tags",                  "Теги"),
     ("invoice_id",            "ID счёта-фактуры"),
+    ("responsible_id",        "ID ответственного"),
+    ("responsible_name",      "Ответственный (менеджер)"),
 ]
 
 HEADER = [col[1] for col in COLUMNS]
@@ -146,6 +148,8 @@ def normalize_payment_request(raw: dict, lookup: "Lookup") -> dict:
         "is_urgent":        _s(raw.get("isUrgent")),
         "tags":             tags_str,
         "invoice_id":       _s(raw.get("invoiceId")),
+        "responsible_id":   _s(raw.get("userId") or raw.get("managerId")),
+        "responsible_name": lookup.user_name(raw.get("userId") or raw.get("managerId")),
     }
 
 
@@ -203,6 +207,8 @@ def normalize_payment(raw: dict, lookup: "Lookup") -> dict:
         "is_urgent":        "",
         "tags":             tags_str,
         "invoice_id":       _s(raw.get("invoiceId")),
+        "responsible_id":   _s(raw.get("userId") or raw.get("managerId")),
+        "responsible_name": lookup.user_name(raw.get("userId") or raw.get("managerId")),
     }
 
 
@@ -225,6 +231,7 @@ class Lookup:
         self._accounts: dict[int, str] = {}
         self._streams: dict[int, str] = {}
         self._organisations: dict[int, str] = {}
+        self._users: dict[int, str] = {}
 
     def load(self, api: FinansistClient):
         """Загружает все справочники из API одним разом."""
@@ -281,10 +288,36 @@ class Lookup:
         except Exception as e:
             logger.warning("Organisations недоступны: %s", e)
 
+        try:
+            for u in api.get_users():
+                uid = u.get("id")
+                if uid is not None:
+                    name = (
+                        u.get("name")
+                        or f"{u.get('firstName', '')} {u.get('lastName', '')}".strip()
+                        or u.get("login", "")
+                        or u.get("email", "")
+                    )
+                    self._users[int(uid)] = name
+        except Exception as e:
+            logger.warning("Users недоступны: %s", e)
+
+        try:
+            for m in api.get_managers():
+                mid = m.get("id")
+                if mid is not None:
+                    name = (
+                        m.get("name")
+                        or f"{m.get('firstName', '')} {m.get('lastName', '')}".strip()
+                    )
+                    self._users.setdefault(int(mid), name)
+        except Exception as e:
+            logger.warning("Managers недоступны: %s", e)
+
         logger.info(
-            "Справочники загружены: проектов=%d, групп=%d, контрагентов=%d, счетов=%d, статей=%d",
+            "Справочники загружены: проектов=%d, групп=%d, контрагентов=%d, счетов=%d, статей=%d, пользователей=%d",
             len(self._projects), len(self._groups),
-            len(self._contragents), len(self._accounts), len(self._streams),
+            len(self._contragents), len(self._accounts), len(self._streams), len(self._users),
         )
 
     def project_name(self, pid: Any) -> str:
@@ -343,6 +376,14 @@ class Lookup:
             return self._organisations.get(int(oid), _s(oid))
         except (ValueError, TypeError):
             return _s(oid)
+
+    def user_name(self, uid: Any) -> str:
+        if uid is None:
+            return ""
+        try:
+            return self._users.get(int(uid), _s(uid))
+        except (ValueError, TypeError):
+            return _s(uid)
 
 
 # ──────────────────────────────────────────────────────────────────────────────

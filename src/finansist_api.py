@@ -268,6 +268,20 @@ class FinansistClient:
         """GET /api/Organisations — организации."""
         return list(self._paginate("Organisations", "listOrganisation"))
 
+    def get_users(self) -> list[dict]:
+        """GET /api/Users — пользователи системы (инициаторы заявок)."""
+        data = self._get("Users")
+        if isinstance(data, list):
+            return data
+        for key in ("listUser", "users", "data", "items", "result"):
+            if isinstance(data, dict) and key in data:
+                return data[key]
+        return []
+
+    def get_managers(self) -> list[dict]:
+        """GET /api/Manager — менеджеры."""
+        return list(self._paginate("Manager", "listManager"))
+
     # ──────────────────────────────────────────────
     # Утилита для отладки
     # ──────────────────────────────────────────────
