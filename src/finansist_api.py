@@ -60,6 +60,7 @@ class FinansistClient:
         self.page_size = page_size
         self._headers = {
             "apiKey": api_key,
+            "X-API-KEY": api_key,
             "Content-Type": "application/json",
             "Accept": "application/json",
         }
