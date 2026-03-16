@@ -215,12 +215,17 @@ class GSheetsClient:
                 cols=len(LOG_HEADER),
             )
             self._retry_api(ws.update, "A1", [LOG_HEADER])
-            # Жирный заголовок
             ws.format("A1:I1", {"textFormat": {"bold": True}})
             time.sleep(BATCH_WRITE_DELAY)
             logger.info("Создана вкладка '%s'", LOG_SHEET)
         else:
             ws = existing[LOG_SHEET]
+            # Обновляем заголовок если он устарел (старый формат — 1 колонка вместо 2)
+            current_header = ws.row_values(1)
+            if current_header != LOG_HEADER:
+                self._retry_api(ws.update, "A1", [LOG_HEADER])
+                ws.format("A1:I1", {"textFormat": {"bold": True}})
+                logger.info("Заголовок лога обновлён")
 
         now = datetime.now(timezone.utc)
         date_str = now.strftime("%Y-%m-%d")

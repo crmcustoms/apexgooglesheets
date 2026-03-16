@@ -289,28 +289,38 @@ class Lookup:
             logger.warning("Organisations недоступны: %s", e)
 
         try:
-            for u in api.get_users():
+            users_list = api.get_users()
+            if users_list:
+                logger.debug("Users первый элемент: %s", users_list[0])
+            for u in users_list:
                 uid = u.get("id")
                 if uid is not None:
                     name = (
                         u.get("name")
+                        or u.get("fullName")
                         or f"{u.get('firstName', '')} {u.get('lastName', '')}".strip()
                         or u.get("login", "")
                         or u.get("email", "")
                     )
-                    self._users[int(uid)] = name
+                    if name:
+                        self._users[int(uid)] = name
         except Exception as e:
             logger.warning("Users недоступны: %s", e)
 
         try:
-            for m in api.get_managers():
+            managers_list = api.get_managers()
+            if managers_list:
+                logger.debug("Managers первый элемент: %s", managers_list[0])
+            for m in managers_list:
                 mid = m.get("id")
                 if mid is not None:
                     name = (
                         m.get("name")
+                        or m.get("fullName")
                         or f"{m.get('firstName', '')} {m.get('lastName', '')}".strip()
                     )
-                    self._users.setdefault(int(mid), name)
+                    if name:
+                        self._users.setdefault(int(mid), name)
         except Exception as e:
             logger.warning("Managers недоступны: %s", e)
 
