@@ -149,6 +149,14 @@ class SyncDatabase:
             "by_year": {row["year"]: row["cnt"] for row in by_year},
         }
 
+    def clear_year(self, year: int, operation_type: str):
+        """Удаляет все записи за год и тип (используется при --force)."""
+        with self._connect() as conn:
+            conn.execute(
+                "DELETE FROM synced_operations WHERE year=? AND operation_type=?",
+                (year, operation_type),
+            )
+
     def close(self):
         """Закрывает соединение (совместимость)."""
         pass

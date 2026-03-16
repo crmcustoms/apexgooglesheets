@@ -517,6 +517,30 @@ class SyncProcessor:
         """Синхронизирует операции за один год на одну вкладку."""
         ws = self._sheets.get_or_create_sheet(year, HEADER)
 
+        # При --force очищаем лист и SQLite, пишем всё с нуля
+        if self._force:
+            logger.info("Год %d [%s]: FORCE — очистка листа...", year, op_type)
+            ws.clear()
+            ws.append_row(HEADER, value_input_option="RAW")
+            self._db.clear_year(year, op_type)
+
+            new_rows = [operation_to_row(op) for op in ops]
+            if new_rows:
+                self._sheets.append_rows_batch(ws, new_rows)
+                db_records = [
+                    {
+                        "operation_id": row[0],
+                        "operation_type": op_type,
+                        "year": year,
+                        "last_status": row[STATUS_NAME_IDX],
+                    }
+                    for row in new_rows
+                ]
+                self._db.mark_synced_batch(db_records)
+            logger.info("Год %d [%s]: записано %d строк", year, op_type, len(new_rows))
+            return len(new_rows), 0, 0
+
+        # Инкрементальный режим
         try:
             all_values = ws.get_all_values()
         except Exception as e:
@@ -540,7 +564,7 @@ class SyncProcessor:
             row_data = operation_to_row(op)
             current_status = op.get("status_name", "")
 
-            if key in existing and not self._force:
+            if key in existing:
                 db_status = self._db.get_status(op_id, op_type)
                 if db_status == current_status:
                     skipped += 1
@@ -554,7 +578,7 @@ class SyncProcessor:
             self._sheets.append_rows_batch(ws, new_rows)
             db_records = [
                 {
-                    "operation_id": row[0],  # ID из колонки A
+                    "operation_id": row[0],
                     "operation_type": op_type,
                     "year": year,
                     "last_status": row[STATUS_NAME_IDX],
