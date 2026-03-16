@@ -430,6 +430,8 @@ class SyncProcessor:
         self._date_to = date_to
         self._lookup = Lookup()
         self._lookup.load(api)
+        # Набор годов, листы которых уже очищены в этом --force запуске
+        self._force_cleared: set[int] = set()
 
     def run(self) -> dict:
         """Запускает синхронизацию. Возвращает статистику."""
@@ -537,9 +539,12 @@ class SyncProcessor:
 
         # При --force очищаем лист и SQLite, пишем всё с нуля
         if self._force:
-            logger.info("Год %d [%s]: FORCE — очистка листа...", year, op_type)
-            ws.clear()
-            ws.append_row(HEADER, value_input_option="RAW")
+            # Очищаем лист только один раз за весь запуск (план+факт пишутся на один лист)
+            if year not in self._force_cleared:
+                logger.info("Год %d: FORCE — очистка листа...", year)
+                ws.clear()
+                ws.append_row(HEADER, value_input_option="RAW")
+                self._force_cleared.add(year)
             self._db.clear_year(year, op_type)
 
             new_rows = [operation_to_row(op) for op in ops]
