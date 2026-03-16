@@ -74,20 +74,25 @@ def _parse_date(date_str: Any) -> datetime | None:
     """Парсит дату в различных форматах из API Финансиста."""
     if not date_str:
         return None
+    clean = str(date_str).split("+")[0].strip().rstrip("Z")
     formats = [
-        "%Y-%m-%dT%H:%M:%S",
-        "%Y-%m-%dT%H:%M:%SZ",
         "%Y-%m-%dT%H:%M:%S.%f",
-        "%Y-%m-%dT%H:%M:%S.%fZ",
+        "%Y-%m-%dT%H:%M:%S",
         "%Y-%m-%d",
         "%d.%m.%Y",
     ]
-    clean = str(date_str).split("+")[0].strip().rstrip("Z")
     for fmt in formats:
         try:
-            return datetime.strptime(clean[:len(fmt)], fmt)
+            return datetime.strptime(clean[:19], fmt) if "T" in clean else datetime.strptime(clean, fmt)
         except (ValueError, TypeError):
             continue
+    # Fallback: попытка нормализовать дату с неполными компонентами (2025-8-2)
+    try:
+        parts = clean[:10].split("-")
+        if len(parts) == 3:
+            return datetime(int(parts[0]), int(parts[1]), int(parts[2]))
+    except (ValueError, TypeError):
+        pass
     logger.warning("Не удалось распарсить дату: '%s'", date_str)
     return None
 
