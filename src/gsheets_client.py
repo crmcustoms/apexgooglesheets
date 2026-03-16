@@ -87,19 +87,44 @@ class GSheetsClient:
             ws = existing[sheet_name]
             logger.info("Найдена вкладка '%s'", sheet_name)
         else:
-            # Создаём новую вкладку
-            ws = self._retry_api(
-                self.spreadsheet.add_worksheet,
-                title=sheet_name,
-                rows=2,
-                cols=len(header_columns),
-            )
-            logger.info("Создана новая вкладка '%s'", sheet_name)
-            # Записываем заголовок
-            self._retry_api(ws.update, "A1", [header_columns])
-            time.sleep(BATCH_WRITE_DELAY)
+            ws = self._create_fresh_sheet(sheet_name, header_columns)
 
         self._sheet_cache[sheet_name] = ws
+        return ws
+
+    def reset_sheet(self, year: int, header_columns: list[str]) -> gspread.Worksheet:
+        """
+        Удаляет вкладку года и создаёт заново — полностью освобождает ячейки.
+        Используется в режиме --force чтобы не превысить лимит 10M ячеек.
+        """
+        sheet_name = str(year)
+
+        # Удаляем старую вкладку если есть
+        existing = {ws.title: ws for ws in self.spreadsheet.worksheets()}
+        if sheet_name in existing:
+            # Нельзя удалить единственную вкладку — сначала создаём временную
+            if len(existing) == 1:
+                tmp = self.spreadsheet.add_worksheet(title="_tmp", rows=2, cols=2)
+            self._retry_api(self.spreadsheet.del_worksheet, existing[sheet_name])
+            logger.info("Удалена вкладка '%s' (FORCE reset)", sheet_name)
+            if "_tmp" in {ws.title for ws in self.spreadsheet.worksheets()}:
+                self._retry_api(self.spreadsheet.del_worksheet, tmp)
+
+        ws = self._create_fresh_sheet(sheet_name, header_columns)
+        self._sheet_cache[sheet_name] = ws
+        return ws
+
+    def _create_fresh_sheet(self, sheet_name: str, header_columns: list[str]) -> gspread.Worksheet:
+        """Создаёт новую пустую вкладку с заголовком."""
+        ws = self._retry_api(
+            self.spreadsheet.add_worksheet,
+            title=sheet_name,
+            rows=2,
+            cols=len(header_columns),
+        )
+        logger.info("Создана вкладка '%s'", sheet_name)
+        self._retry_api(ws.update, "A1", [header_columns])
+        time.sleep(BATCH_WRITE_DELAY)
         return ws
 
     def get_existing_ids_in_sheet(

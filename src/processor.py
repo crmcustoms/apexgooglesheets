@@ -535,18 +535,15 @@ class SyncProcessor:
         self, ops: list[dict], op_type: str, year: int
     ) -> tuple[int, int, int]:
         """Синхронизирует операции за один год на одну вкладку."""
-        ws = self._sheets.get_or_create_sheet(year, HEADER)
+        # При --force удаляем и пересоздаём лист (единственный надёжный способ освободить ячейки)
+        if self._force and year not in self._force_cleared:
+            logger.info("Год %d: FORCE — пересоздаём лист...", year)
+            ws = self._sheets.reset_sheet(year, HEADER)
+            self._force_cleared.add(year)
+        else:
+            ws = self._sheets.get_or_create_sheet(year, HEADER)
 
-        # При --force очищаем лист и SQLite, пишем всё с нуля
         if self._force:
-            # Очищаем лист только один раз за весь запуск (план+факт пишутся на один лист)
-            if year not in self._force_cleared:
-                logger.info("Год %d: FORCE — очистка листа...", year)
-                ws.clear()
-                # Сжимаем до минимума чтобы не превышать лимит 10M ячеек Google Sheets
-                ws.resize(rows=1, cols=len(HEADER))
-                ws.append_row(HEADER, value_input_option="RAW")
-                self._force_cleared.add(year)
             self._db.clear_year(year, op_type)
 
             new_rows = [operation_to_row(op) for op in ops]
