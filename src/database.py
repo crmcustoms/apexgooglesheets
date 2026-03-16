@@ -143,6 +143,12 @@ class SyncDatabase:
             ).fetchall()
         return {
             "total": total,
+            "plan": dict(by_type).get("plan", 0),
+            "fact": dict(by_type).get("fact", 0),
             "by_type": {row["operation_type"]: row["cnt"] for row in by_type},
             "by_year": {row["year"]: row["cnt"] for row in by_year},
         }
+
+    def close(self):
+        """Закрывает соединение (совместимость)."""
+        pass
