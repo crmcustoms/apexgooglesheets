@@ -115,9 +115,13 @@ def normalize_payment_request(raw: dict, lookup: "Lookup") -> dict:
     contragent_id = raw.get("contragentId")
     account_id = raw.get("accountId")
     organisation_id = raw.get("organisationId")
-    status_id = raw.get("statusId")
+    # API возвращает поле "status", не "statusId"
+    status_id = raw.get("status") or raw.get("statusId")
     tags = raw.get("tags") or []
     tags_str = ", ".join(str(t) for t in tags) if isinstance(tags, list) else _s(tags)
+    # userName/userEmail прямо в записи — не нужен lookup
+    responsible_id = raw.get("userId") or raw.get("managerId")
+    responsible_name = raw.get("userName") or raw.get("userEmail") or lookup.user_name(responsible_id)
 
     return {
         "id":               _s(raw.get("id")),
@@ -125,9 +129,9 @@ def normalize_payment_request(raw: dict, lookup: "Lookup") -> dict:
         "operation_type":   "план",
         "date":             date_obj.strftime("%Y-%m-%d") if date_obj else date_str,
         "year":             date_obj.year if date_obj else 0,
-        "amount":           _s(raw.get("amount") or raw.get("sum") or raw.get("sourcePaymentSum")),
+        "amount":           _s(raw.get("paymentSum") or raw.get("sourcePaymentSum") or raw.get("amount")),
         "source_amount":    _s(raw.get("sourcePaymentSum")),
-        "currency":         _s(raw.get("currency") or raw.get("currencyId") or "RUB"),
+        "currency":         _s(raw.get("sourceCurrencyId") or raw.get("currency") or "RUB"),
         "stream_id":        _s(stream_id),
         "stream_name":      lookup.stream_name(stream_id),
         "project_id":       _s(project_id),
@@ -148,8 +152,8 @@ def normalize_payment_request(raw: dict, lookup: "Lookup") -> dict:
         "is_urgent":        _s(raw.get("isUrgent")),
         "tags":             tags_str,
         "invoice_id":       _s(raw.get("invoiceId")),
-        "responsible_id":   _s(raw.get("userId") or raw.get("managerId")),
-        "responsible_name": lookup.user_name(raw.get("userId") or raw.get("managerId")),
+        "responsible_id":   _s(responsible_id),
+        "responsible_name": responsible_name,
     }
 
 
