@@ -100,18 +100,25 @@ class FinansistClient:
         self,
         endpoint: str,
         list_key: str,
-        extra_params: dict | None = None,
+        extra_params: dict | list | None = None,
     ) -> Generator[dict, None, None]:
         """
         Итерирует все страницы эндпоинта через offset-пагинацию.
         API лимит: 100 записей на страницу.
+        extra_params может быть dict или list[tuple] (для повторяющихся ключей, напр. statusId).
         """
         offset = 0
         total_fetched = 0
-        params = dict(extra_params or {})
+        # Нормализуем в список кортежей чтобы поддерживать повторяющиеся ключи
+        if isinstance(extra_params, dict):
+            base_params: list[tuple] = list(extra_params.items())
+        elif isinstance(extra_params, list):
+            base_params = list(extra_params)
+        else:
+            base_params = []
 
         while True:
-            params["offset"] = offset
+            params = base_params + [("offset", offset)]
             data = self._get(endpoint, params=params)
 
             # API может вернуть список напрямую или обёрнутый в объект
@@ -160,7 +167,7 @@ class FinansistClient:
         date_to: str | None = None,
         project_id: int | None = None,
         organisation_id: int | None = None,
-        status_id: int | None = None,
+        status_ids: list[int] | None = None,
     ) -> Generator[dict, None, None]:
         """
         ПЛАН: заявки на платеж.
@@ -172,20 +179,26 @@ class FinansistClient:
 
         statusId: 710=Создана/На подписание, 711=На подписании,
                   712=Подписана, 713=Отозвана
-        """
-        extra: dict[str, Any] = {}
-        if date_from:
-            extra["dateFrom"] = date_from
-        if date_to:
-            extra["dateTo"] = date_to
-        if project_id:
-            extra["projectId"] = project_id
-        if organisation_id:
-            extra["organisationId"] = organisation_id
-        if status_id:
-            extra["statusId"] = status_id
 
-        yield from self._paginate("PaymentRequests", "listPaymentRequest", extra)
+        ВАЖНО: API требует statusId обязательно. По умолчанию запрашиваем все статусы.
+        httpx кодирует список как statusId=710&statusId=711&...
+        """
+        # API требует statusId — передаём все статусы если не задан конкретный
+        ids = status_ids if status_ids is not None else list(PAYMENT_REQUEST_STATUSES.keys())
+
+        # httpx принимает список значений для одного ключа через список кортежей
+        params: list[tuple[str, Any]] = [("statusId", sid) for sid in ids]
+
+        if date_from:
+            params.append(("dateFrom", date_from))
+        if date_to:
+            params.append(("dateTo", date_to))
+        if project_id:
+            params.append(("projectId", project_id))
+        if organisation_id:
+            params.append(("organisationId", organisation_id))
+
+        yield from self._paginate("PaymentRequests", "listPaymentRequest", params)
 
     def get_payments(
         self,
