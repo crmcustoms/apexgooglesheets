@@ -91,8 +91,8 @@ class GSheetsClient:
             ws = self._retry_api(
                 self.spreadsheet.add_worksheet,
                 title=sheet_name,
-                rows=5000,
-                cols=len(header_columns) + 5,
+                rows=2,
+                cols=len(header_columns),
             )
             logger.info("Создана новая вкладка '%s'", sheet_name)
             # Записываем заголовок

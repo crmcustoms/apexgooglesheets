@@ -543,6 +543,8 @@ class SyncProcessor:
             if year not in self._force_cleared:
                 logger.info("Год %d: FORCE — очистка листа...", year)
                 ws.clear()
+                # Сжимаем до минимума чтобы не превышать лимит 10M ячеек Google Sheets
+                ws.resize(rows=1, cols=len(HEADER))
                 ws.append_row(HEADER, value_input_option="RAW")
                 self._force_cleared.add(year)
             self._db.clear_year(year, op_type)
