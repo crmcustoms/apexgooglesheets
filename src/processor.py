@@ -72,6 +72,28 @@ def _s(value: Any) -> str:
     return str(value)
 
 
+def _n(value: Any) -> float | int | str:
+    """Числовые поля — передаём как число, не строку.
+    Google Sheets сам применит формат ячейки по локали (точка или запятая).
+    """
+    if value is None or value == "" or value == 0:
+        return ""
+    try:
+        f = float(value)
+        return int(f) if f == int(f) else f
+    except (ValueError, TypeError):
+        return _s(value)
+
+
+# Поля которые должны быть числами в таблице
+NUMERIC_FIELDS = {
+    "year", "amount", "source_amount",
+    "stream_id", "project_id", "group_id",
+    "contragent_id", "account_id", "organisation_id",
+    "status_id", "responsible_id", "invoice_id",
+}
+
+
 def _parse_date(date_str: Any) -> datetime | None:
     """Парсит дату в различных форматах из API Финансиста."""
     if not date_str:
@@ -220,9 +242,18 @@ def normalize_payment(raw: dict, lookup: "Lookup") -> dict:
     }
 
 
-def operation_to_row(op: dict) -> list[str]:
-    """Преобразует нормализованную операцию в строку Google Sheets."""
-    return [op.get(key, "") for key in FIELD_KEYS]
+def operation_to_row(op: dict) -> list:
+    """Преобразует нормализованную операцию в строку Google Sheets.
+    Числовые поля передаются как float/int — Google Sheets считает их числами.
+    """
+    row = []
+    for key in FIELD_KEYS:
+        val = op.get(key, "")
+        if key in NUMERIC_FIELDS:
+            row.append(_n(val))
+        else:
+            row.append(val if val is not None else "")
+    return row
 
 
 # ──────────────────────────────────────────────────────────────────────────────
