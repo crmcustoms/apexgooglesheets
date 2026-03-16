@@ -201,7 +201,7 @@ class GSheetsClient:
 
         LOG_SHEET = "Лог"
         LOG_HEADER = [
-            "Дата и время (UTC)", "ПЛАН получено", "ПЛАН новых",
+            "Дата", "Время (UTC)", "ПЛАН получено", "ПЛАН новых",
             "ПЛАН обновлено", "ФАКТ получено", "ФАКТ новых",
             "ФАКТ обновлено", "Ошибки",
         ]
@@ -216,22 +216,24 @@ class GSheetsClient:
             )
             self._retry_api(ws.update, "A1", [LOG_HEADER])
             # Жирный заголовок
-            ws.format("A1:H1", {"textFormat": {"bold": True}})
+            ws.format("A1:I1", {"textFormat": {"bold": True}})
             time.sleep(BATCH_WRITE_DELAY)
             logger.info("Создана вкладка '%s'", LOG_SHEET)
         else:
             ws = existing[LOG_SHEET]
 
-        now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        now = datetime.now(timezone.utc)
+        date_str = now.strftime("%Y-%m-%d")
+        time_str = now.strftime("%H:%M:%S")
         p = stats.get("plan", {})
         f = stats.get("fact", {})
         errors = "; ".join(stats.get("errors", [])) or "—"
 
         row = [
-            now,
+            date_str, time_str,
             p.get("total", 0), p.get("new", 0), p.get("updated", 0),
             f.get("total", 0), f.get("new", 0), f.get("updated", 0),
             errors,
         ]
         self._retry_api(ws.append_rows, [row], value_input_option="USER_ENTERED")
-        logger.info("Лог синхронизации записан: %s", now)
+        logger.info("Лог синхронизации записан: %s %s", date_str, time_str)
