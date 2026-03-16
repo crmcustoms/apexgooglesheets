@@ -167,20 +167,24 @@ def normalize_payment(raw: dict, lookup: "Lookup") -> dict:
         streamId/factStreamId, comment, tags
     """
     date_str = (
-        raw.get("date")
-        or raw.get("paymentDate")
+        raw.get("paymentDate")
+        or raw.get("internalPaymentDate")
+        or raw.get("date")
         or raw.get("operationDate")
         or ""
     )
     date_obj = _parse_date(date_str)
-    stream_id = raw.get("streamId") or raw.get("factStreamId")
-    project_id = raw.get("projectId")
-    contragent_id = raw.get("contragentId")
+    stream_id = raw.get("factStreamId") or raw.get("streamId")
+    project_id = raw.get("projectId") or None
+    contragent_id = raw.get("contragentId") or None
     account_id = raw.get("accountId")
     organisation_id = raw.get("organisationId")
-    status_id = raw.get("statusId")
+    # Для Payments статус = paymentStatusId
+    status_id = raw.get("paymentStatusId") or raw.get("statusId")
     tags = raw.get("tags") or []
     tags_str = ", ".join(str(t) for t in tags) if isinstance(tags, list) else _s(tags)
+    # Ответственный прямо в записи
+    responsible_name = raw.get("responsible") or raw.get("userName") or ""
 
     return {
         "id":               _s(raw.get("id")),
@@ -188,9 +192,9 @@ def normalize_payment(raw: dict, lookup: "Lookup") -> dict:
         "operation_type":   "факт",
         "date":             date_obj.strftime("%Y-%m-%d") if date_obj else date_str,
         "year":             date_obj.year if date_obj else 0,
-        "amount":           _s(raw.get("amount") or raw.get("sum") or raw.get("sourcePaymentSum")),
+        "amount":           _s(raw.get("paymentSum") or raw.get("sourcePaymentSum") or raw.get("amount")),
         "source_amount":    _s(raw.get("sourcePaymentSum")),
-        "currency":         _s(raw.get("currency") or raw.get("currencyId") or "RUB"),
+        "currency":         _s(raw.get("sourceCurrencyId") or raw.get("currency") or "RUB"),
         "stream_id":        _s(stream_id),
         "stream_name":      lookup.stream_name(stream_id),
         "project_id":       _s(project_id),
@@ -207,12 +211,12 @@ def normalize_payment(raw: dict, lookup: "Lookup") -> dict:
         "status_name":      _s(status_id),
         "payment_for":      _s(raw.get("paymentFor")),
         "payment_purpose":  _s(raw.get("paymentPurpose")),
-        "comment":          _s(raw.get("comment") or raw.get("description")),
+        "comment":          _s(raw.get("comment")),
         "is_urgent":        "",
         "tags":             tags_str,
         "invoice_id":       _s(raw.get("invoiceId")),
-        "responsible_id":   _s(raw.get("userId") or raw.get("managerId")),
-        "responsible_name": lookup.user_name(raw.get("userId") or raw.get("managerId")),
+        "responsible_id":   "",
+        "responsible_name": responsible_name,
     }
 
 
