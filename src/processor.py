@@ -407,6 +407,13 @@ class SyncProcessor:
         stats["db"] = self._db.stats()
         logger.info("=== Синхронизация завершена ===")
         self._log_stats(stats)
+
+        # Записываем строку в лог-вкладку таблицы
+        try:
+            self._sheets.write_sync_log(stats)
+        except Exception as e:
+            logger.warning("Не удалось записать лог в таблицу: %s", e)
+
         return stats
 
     def _collect(self, op_type: str) -> list[dict]:
@@ -443,6 +450,8 @@ class SyncProcessor:
             logger.error("Ошибка получения %s операций: %s", op_type, e)
             raise
 
+        # Сортировка от новых к старым
+        result.sort(key=lambda x: x.get("date", ""), reverse=True)
         logger.info("%s: нормализовано %d операций", op_type.upper(), len(result))
         return result
 

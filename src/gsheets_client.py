@@ -191,3 +191,47 @@ class GSheetsClient:
     def list_sheet_names(self) -> list[str]:
         """Возвращает список названий всех вкладок."""
         return [ws.title for ws in self.spreadsheet.worksheets()]
+
+    def write_sync_log(self, stats: dict) -> None:
+        """
+        Записывает строку в вкладку 'Лог' с датой/временем и итогами синхронизации.
+        Создаёт вкладку если её нет.
+        """
+        from datetime import datetime, timezone
+
+        LOG_SHEET = "Лог"
+        LOG_HEADER = [
+            "Дата и время (UTC)", "ПЛАН получено", "ПЛАН новых",
+            "ПЛАН обновлено", "ФАКТ получено", "ФАКТ новых",
+            "ФАКТ обновлено", "Ошибки",
+        ]
+
+        existing = {ws.title: ws for ws in self.spreadsheet.worksheets()}
+        if LOG_SHEET not in existing:
+            ws = self._retry_api(
+                self.spreadsheet.add_worksheet,
+                title=LOG_SHEET,
+                rows=1000,
+                cols=len(LOG_HEADER),
+            )
+            self._retry_api(ws.update, "A1", [LOG_HEADER])
+            # Жирный заголовок
+            ws.format("A1:H1", {"textFormat": {"bold": True}})
+            time.sleep(BATCH_WRITE_DELAY)
+            logger.info("Создана вкладка '%s'", LOG_SHEET)
+        else:
+            ws = existing[LOG_SHEET]
+
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        p = stats.get("plan", {})
+        f = stats.get("fact", {})
+        errors = "; ".join(stats.get("errors", [])) or "—"
+
+        row = [
+            now,
+            p.get("total", 0), p.get("new", 0), p.get("updated", 0),
+            f.get("total", 0), f.get("new", 0), f.get("updated", 0),
+            errors,
+        ]
+        self._retry_api(ws.append_rows, [row], value_input_option="USER_ENTERED")
+        logger.info("Лог синхронизации записан: %s", now)
