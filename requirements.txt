@@ -1,0 +1,16 @@
+# Finansist → Google Sheets Sync Engine
+
+# HTTP клиент
+httpx>=0.27.0
+
+# Retry логика
+tenacity>=8.3.0
+
+# Google Sheets
+gspread>=6.1.0
+google-auth>=2.29.0
+
+# SQLite (встроен в Python, доп. зависимостей нет)
+
+# Конфигурация из .env
+python-dotenv>=1.0.0
