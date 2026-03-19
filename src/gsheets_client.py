@@ -190,9 +190,17 @@ class GSheetsClient:
         if not row_updates:
             return 0
 
+        def col_letter(n: int) -> str:
+            """Конвертирует номер колонки (1-based) в буквы Excel: 1→A, 26→Z, 27→AA, 30→AD."""
+            result = ""
+            while n > 0:
+                n, remainder = divmod(n - 1, 26)
+                result = chr(65 + remainder) + result
+            return result
+
         batch_data = []
         for row_num, values in row_updates:
-            end_col = chr(ord("A") + len(values) - 1)
+            end_col = col_letter(len(values))
             batch_data.append({
                 "range": f"A{row_num}:{end_col}{row_num}",
                 "values": [values],
