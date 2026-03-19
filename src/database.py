@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS synced_operations (
     sheet_row       INTEGER,         -- номер строки в таблице (опционально)
     synced_at       TEXT NOT NULL DEFAULT (datetime('now')),
     last_status     TEXT,            -- последний известный статус операции
+    row_hash        TEXT,            -- MD5 всей строки для отслеживания любых изменений
     PRIMARY KEY (operation_id, operation_type)
 );
 
@@ -35,6 +36,11 @@ class SyncDatabase:
     def _init_db(self):
         with self._connect() as conn:
             conn.executescript(CREATE_TABLE_SQL)
+            # Миграция: добавляем row_hash если колонки нет (обратная совместимость)
+            cols = [r[1] for r in conn.execute("PRAGMA table_info(synced_operations)").fetchall()]
+            if "row_hash" not in cols:
+                conn.execute("ALTER TABLE synced_operations ADD COLUMN row_hash TEXT")
+                logger.info("Миграция БД: добавлена колонка row_hash")
         logger.info("База данных инициализирована: %s", self.db_path)
 
     @contextmanager
@@ -68,6 +74,15 @@ class SyncDatabase:
             ).fetchone()
             return row["last_status"] if row else None
 
+    def get_hash(self, operation_id: str, operation_type: str) -> str | None:
+        """Возвращает сохранённый хэш строки."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT row_hash FROM synced_operations WHERE operation_id=? AND operation_type=?",
+                (str(operation_id), operation_type),
+            ).fetchone()
+            return row["row_hash"] if row else None
+
     def mark_synced(
         self,
         operation_id: str,
@@ -75,20 +90,22 @@ class SyncDatabase:
         year: int,
         last_status: str | None = None,
         sheet_row: int | None = None,
+        row_hash: str | None = None,
     ):
         """Записывает операцию как успешно выгруженную."""
         with self._connect() as conn:
             conn.execute(
                 """
                 INSERT INTO synced_operations
-                    (operation_id, operation_type, year, last_status, sheet_row, synced_at)
-                VALUES (?, ?, ?, ?, ?, datetime('now'))
+                    (operation_id, operation_type, year, last_status, sheet_row, row_hash, synced_at)
+                VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
                 ON CONFLICT(operation_id, operation_type) DO UPDATE SET
                     last_status = excluded.last_status,
                     sheet_row   = excluded.sheet_row,
+                    row_hash    = excluded.row_hash,
                     synced_at   = excluded.synced_at
                 """,
-                (str(operation_id), operation_type, year, last_status, sheet_row),
+                (str(operation_id), operation_type, year, last_status, sheet_row, row_hash),
             )
 
     def mark_synced_batch(self, records: list[dict]):
@@ -101,11 +118,12 @@ class SyncDatabase:
             conn.executemany(
                 """
                 INSERT INTO synced_operations
-                    (operation_id, operation_type, year, last_status, sheet_row, synced_at)
-                VALUES (:operation_id, :operation_type, :year, :last_status, :sheet_row, datetime('now'))
+                    (operation_id, operation_type, year, last_status, sheet_row, row_hash, synced_at)
+                VALUES (:operation_id, :operation_type, :year, :last_status, :sheet_row, :row_hash, datetime('now'))
                 ON CONFLICT(operation_id, operation_type) DO UPDATE SET
                     last_status = excluded.last_status,
                     sheet_row   = excluded.sheet_row,
+                    row_hash    = excluded.row_hash,
                     synced_at   = excluded.synced_at
                 """,
                 [
@@ -115,6 +133,7 @@ class SyncDatabase:
                         "year": r["year"],
                         "last_status": r.get("last_status"),
                         "sheet_row": r.get("sheet_row"),
+                        "row_hash": r.get("row_hash"),
                     }
                     for r in records
                 ],

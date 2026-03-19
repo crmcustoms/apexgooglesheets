@@ -7,6 +7,7 @@
   ФАКТ → GET /api/Payments         (фактические платежи)
 """
 
+import hashlib
 import logging
 from collections import defaultdict
 from datetime import datetime
@@ -254,6 +255,11 @@ def operation_to_row(op: dict) -> list:
         else:
             row.append(val if val is not None else "")
     return row
+
+
+def row_hash(row_data: list) -> str:
+    """MD5-хэш строки данных для отслеживания любых изменений (сумма, дата, контрагент...)."""
+    return hashlib.md5(str(row_data).encode("utf-8")).hexdigest()
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -577,17 +583,18 @@ class SyncProcessor:
         if self._force:
             self._db.clear_year(year, op_type)
 
-            new_rows = [operation_to_row(op) for op in ops]
+            new_rows = [(operation_to_row(op), row_hash(operation_to_row(op))) for op in ops]
             if new_rows:
-                self._sheets.append_rows_batch(ws, new_rows)
+                self._sheets.append_rows_batch(ws, [r for r, _ in new_rows])
                 db_records = [
                     {
                         "operation_id": row[0],
                         "operation_type": op_type,
                         "year": year,
                         "last_status": row[STATUS_NAME_IDX],
+                        "row_hash": h,
                     }
-                    for row in new_rows
+                    for row, h in new_rows
                 ]
                 self._db.mark_synced_batch(db_records)
             logger.info("Год %d [%s]: записано %d строк", year, op_type, len(new_rows))
@@ -616,28 +623,34 @@ class SyncProcessor:
             # op["operation_type"] = "план"/"факт" — совпадает с тем что записано в колонке C листа
             key = (op_id, op["operation_type"])
             row_data = operation_to_row(op)
-            current_status = op.get("status_name", "")
+            current_hash = row_hash(row_data)
 
             if key in existing:
-                db_status = self._db.get_status(op_id, op_type)
-                if db_status == current_status:
+                # Сравниваем хэш всей строки — реагируем на любое изменение (сумма, дата, контрагент...)
+                stored_hash = self._db.get_hash(op_id, op_type)
+                if stored_hash == current_hash:
                     skipped += 1
                     continue
                 update_pairs.append((existing[key], row_data))
-                self._db.mark_synced(op_id, op_type, year, last_status=current_status)
+                self._db.mark_synced(
+                    op_id, op_type, year,
+                    last_status=op.get("status_name", ""),
+                    row_hash=current_hash,
+                )
             else:
-                new_rows.append(row_data)
+                new_rows.append((row_data, current_hash))
 
         if new_rows:
-            self._sheets.append_rows_batch(ws, new_rows)
+            self._sheets.append_rows_batch(ws, [r for r, _ in new_rows])
             db_records = [
                 {
                     "operation_id": row[0],
                     "operation_type": op_type,
                     "year": year,
                     "last_status": row[STATUS_NAME_IDX],
+                    "row_hash": h,
                 }
-                for row in new_rows
+                for row, h in new_rows
             ]
             self._db.mark_synced_batch(db_records)
 
