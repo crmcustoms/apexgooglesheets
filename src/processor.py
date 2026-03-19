@@ -613,7 +613,8 @@ class SyncProcessor:
 
         for op in ops:
             op_id = str(op["id"])
-            key = (op_id, op_type)
+            # op["operation_type"] = "план"/"факт" — совпадает с тем что записано в колонке C листа
+            key = (op_id, op["operation_type"])
             row_data = operation_to_row(op)
             current_status = op.get("status_name", "")
 
