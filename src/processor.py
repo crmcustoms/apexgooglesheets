@@ -17,6 +17,13 @@ from .finansist_api import FinansistClient, PAYMENT_REQUEST_STATUSES
 from .gsheets_client import GSheetsClient
 from .database import SyncDatabase
 
+# Статусы фактических платежей (GET /api/Payments → paymentStatusId)
+PAYMENT_STATUSES = {
+    529: "Запланирован",
+    530: "На подписании",
+    531: "Оплачен",
+}
+
 logger = logging.getLogger(__name__)
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -204,6 +211,10 @@ def normalize_payment(raw: dict, lookup: "Lookup") -> dict:
     organisation_id = raw.get("organisationId")
     # Для Payments статус = paymentStatusId
     status_id = raw.get("paymentStatusId") or raw.get("statusId")
+    payment_status_int = int(status_id) if status_id else 0
+    # 529 = Запланирован (деньги ещё не прошли) → план
+    # 530/531 = На подписании / Оплачен → факт
+    op_type = "план" if payment_status_int == 529 else "факт"
     tags = raw.get("tags") or []
     tags_str = ", ".join(str(t) for t in tags) if isinstance(tags, list) else _s(tags)
     # Ответственный прямо в записи
@@ -212,7 +223,7 @@ def normalize_payment(raw: dict, lookup: "Lookup") -> dict:
     return {
         "id":               _s(raw.get("id")),
         "external_id":      _s(raw.get("externalId")),
-        "operation_type":   "факт",
+        "operation_type":   op_type,
         "date":             date_obj.strftime("%Y-%m-%d") if date_obj else date_str,
         "year":             date_obj.year if date_obj else 0,
         "amount":           _s(raw.get("paymentSum") or raw.get("sourcePaymentSum") or raw.get("amount")),
@@ -231,7 +242,7 @@ def normalize_payment(raw: dict, lookup: "Lookup") -> dict:
         "organisation_id":  _s(organisation_id),
         "organisation_name": lookup.organisation_name(organisation_id),
         "status_id":        _s(status_id),
-        "status_name":      _s(status_id),
+        "status_name":      PAYMENT_STATUSES.get(payment_status_int, _s(status_id)) if payment_status_int else _s(status_id),
         "payment_for":      _s(raw.get("paymentFor")),
         "payment_purpose":  _s(raw.get("paymentPurpose")),
         "comment":          _s(raw.get("comment")),
