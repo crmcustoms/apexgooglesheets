@@ -544,9 +544,16 @@ class SyncProcessor:
                 def normalizer(r):
                     return normalize_payment(r, self._lookup)
 
+            seen_ids: set[str] = set()  # защита от дублей при pagination drift
             for raw in raw_iter:
                 try:
                     op = normalizer(raw)
+                    op_key = str(op.get("id", "")) if op.get("id") else ""
+                    if op_key and op_key in seen_ids:
+                        logger.warning("Пропущен дубликат из API (pagination drift): id=%s", op_key)
+                        continue
+                    if op_key:
+                        seen_ids.add(op_key)
                     if op["year"] > 0:
                         result.append(op)
                     else:
